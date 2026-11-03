@@ -3,6 +3,7 @@ import { get } from '../../lib/api.js';
 import { useAuth } from '../../lib/auth.jsx';
 import { dayLabel, formatDate, formatTime, monthLabel, num, taka } from '../../lib/format.js';
 import { Empty, Loading, PageHeader, StatusBadge, cx, useLoad } from '../../components/ui.jsx';
+import { daysSince } from './Backup.jsx';
 
 function Stat({ value, label, to, tone }) {
   return (
@@ -22,6 +23,15 @@ export default function Dashboard() {
       {(d) => (
         <div className="space-y-6">
           <PageHeader title={`Hello, ${user?.name?.split(' ')[0] || 'admin'}`} subtitle={dayLabel(d.today, true)} />
+
+          {d.students.total > 0 && (d.lastBackupAt === null || daysSince(d.lastBackupAt) > 7) && (
+            <Link to="/admin/backup" className="flex items-center justify-between gap-3 rounded-xl border border-draft/40 bg-draft-tint px-4 py-3 text-draft">
+              <span className="font-semibold">
+                {d.lastBackupAt ? `Last backup was ${daysSince(d.lastBackupAt)} days ago.` : 'No backup taken yet.'} Download one now.
+              </span>
+              <span className="shrink-0 font-semibold underline">Backup</span>
+            </Link>
+          )}
 
           {d.batches.active === 0 ? (
             <Empty

@@ -180,6 +180,15 @@ const paymentSchema = new Schema(
 paymentSchema.index({ student: 1, kind: 1, month: 1 });
 paymentSchema.index({ paidAt: -1 });
 
+// Small key/value store for app-wide facts (e.g. when the last backup was taken)
+const settingSchema = new Schema(
+  {
+    key: { type: String, required: true, unique: true },
+    value: Schema.Types.Mixed,
+  },
+  { timestamps: true },
+);
+
 export const Admin = model('Admin', adminSchema);
 export const Program = model('Program', programSchema);
 export const Batch = model('Batch', batchSchema);
@@ -191,3 +200,4 @@ export const Attendance = model('Attendance', attendanceSchema);
 export const Notice = model('Notice', noticeSchema);
 export const Event = model('Event', eventSchema);
 export const Payment = model('Payment', paymentSchema);
+export const Setting = model('Setting', settingSchema);

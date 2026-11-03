@@ -87,6 +87,24 @@ Without this you can still download the response sheet as CSV and use **Upload C
 
 Never commit `.env` or the JSON key to GitHub.
 
+## Backup and restore
+
+Atlas's free tier keeps no backups, so take your own.
+
+- **Admin panel → Backup → Download backup.** Saves one `.json` file with everything (students, results, attendance, fees, notices, logins). The dashboard reminds you if the last backup is older than 7 days.
+- **From the terminal:** `npm run backup` saves the same file into `server/backups/`.
+
+The file contains phone numbers and password hashes: keep it in a private place (your own Google Drive). `backups/` and `biohelix-backup-*.json` are in `.gitignore`.
+
+**Restore** (replaces ALL current data):
+
+```bash
+npm run restore -- "C:\path\to\biohelix-backup-2026-11-03-1530.json"                     # check only, changes nothing
+npm run restore -- "C:\path\to\biohelix-backup-2026-11-03-1530.json" --confirm biohelix  # really restore
+```
+
+Before restoring, the current data is saved to `server/backups/before-restore-….json`, so a wrong restore can be undone the same way. Use the full path to the file.
+
 ## 4. Deploy (Render + MongoDB Atlas)
 
 1. Push this folder to a **private** GitHub repo.
@@ -151,6 +169,7 @@ All routes are under `/api`. Admin-only unless noted.
 | CRUD | `/notices`, `/events` | GET `/events?from=&to=` includes exams |
 | GET | `/fees/students/:id`, `/fees/dues?month=&batch=` | |
 | GET/POST | `/fees/payments` | DELETE only same day |
+| GET | `/backup/info`, `/backup/download` | full database export |
 | GET | `/dashboard` | |
 | GET | `/me`, `/me/results`, `/me/results/:examId`, `/me/chapters` | student only |
 | GET | `/me/attendance?month=`, `/me/schedule`, `/me/notices`, `/me/fees` | student only |

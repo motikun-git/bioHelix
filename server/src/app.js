@@ -17,6 +17,7 @@ import dashboardRoutes from './routes/dashboard.js';
 import attendanceRoutes from './routes/attendance.js';
 import noticeRoutes from './routes/notices.js';
 import feeRoutes from './routes/fees.js';
+import backupRoutes from './routes/backup.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const clientDist = path.resolve(here, '../../client/dist');
@@ -53,6 +54,7 @@ export function createApp() {
   api.use('/exams', requireAdmin, examRoutes);
   api.use('/attendance', requireAdmin, attendanceRoutes);
   api.use('/fees', requireAdmin, feeRoutes);
+  api.use('/backup', requireAdmin, backupRoutes);
   api.use('/', requireAdmin, noticeRoutes); // /notices and /events
   api.use('/', requireAdmin, programRoutes); // /programs and /batches
   api.use(notFound);

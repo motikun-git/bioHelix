@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { Attendance, Batch, Exam, Payment, Student } from '../models/index.js';
 import { examStats } from '../services/results.js';
 import { dueList } from '../services/fees.js';
+import { lastBackupInfo } from '../services/backup.js';
 import { localDate, localMonth, monthRange } from '../utils/helpers.js';
 
 const router = Router();
@@ -14,7 +15,7 @@ router.get('/', async (req, res) => {
   const [from, to] = monthRange(month);
   const weekday = DAY_NAMES[new Date(`${today}T12:00:00Z`).getUTCDay()];
 
-  const [activeStudents, totalStudents, batches, examCounts, recent, todaySheets, monthPayments, dues] = await Promise.all([
+  const [activeStudents, totalStudents, batches, examCounts, recent, todaySheets, monthPayments, dues, lastBackup] = await Promise.all([
     Student.countDocuments({ status: 'active' }),
     Student.countDocuments(),
     Batch.find({ isActive: true }).select('name days startTime').sort({ startTime: 1, name: 1 }).lean(),
@@ -25,6 +26,7 @@ router.get('/', async (req, res) => {
       .select('amount')
       .lean(),
     dueList({ month }),
+    lastBackupInfo(),
   ]);
   const stats = await examStats(
     recent.map((e) => e._id),
@@ -35,6 +37,7 @@ router.get('/', async (req, res) => {
 
   res.json({
     today,
+    lastBackupAt: lastBackup?.at || null,
     students: { active: activeStudents, total: totalStudents },
     batches: { active: batches.length },
     exams: { draft: byStatus.draft || 0, imported: byStatus.imported || 0, published: byStatus.published || 0 },

@@ -5,3 +5,8 @@ dist/
 !.env.example
 *.log
 .DS_Store
+
+# Backups contain student data and password hashes: keep them off GitHub
+backups/
+biohelix-backup-*.json
+before-restore-*.json

@@ -15,6 +15,7 @@ const icons = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
   results: 'M5 20V10M12 20V4M19 20v-7',
+  backup: 'M12 3v12M7 10l5 5 5-5M4 17v3h16v-3',
 };
 
 export function Icon({ name, className }) {
@@ -34,6 +35,7 @@ export const adminNav = [
   { to: '/admin/notices', label: 'Notices', icon: 'notices' },
   { to: '/admin/calendar', label: 'Calendar', icon: 'calendar' },
   { to: '/admin/batches', label: 'Batches', icon: 'batches' },
+  { to: '/admin/backup', label: 'Backup', icon: 'backup' },
 ];
 
 // Phone bottom bar: the four things done daily, everything else under More

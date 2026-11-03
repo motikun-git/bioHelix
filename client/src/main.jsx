@@ -16,6 +16,7 @@ import ExamDetail from './pages/admin/ExamDetail.jsx';
 import Attendance from './pages/admin/Attendance.jsx';
 import Notices, { Calendar } from './pages/admin/Notices.jsx';
 import Fees, { Receipt } from './pages/admin/Fees.jsx';
+import Backup from './pages/admin/Backup.jsx';
 
 // The chart library is big, so the student portal loads it only when needed
 const PortalHome = lazy(() => import('./pages/portal/Portal.jsx'));
@@ -78,6 +79,7 @@ createRoot(document.getElementById('root')).render(
               <Route path="fees" element={<Fees />} />
               <Route path="fees/receipt/:id" element={<Receipt />} />
               <Route path="more" element={<AdminMore />} />
+              <Route path="backup" element={<Backup />} />
               <Route path="password" element={<ChangePassword />} />
             </Route>
 
