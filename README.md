@@ -107,15 +107,18 @@ Before restoring, the current data is saved to `server/backups/before-restore-�
 
 ## 4. Deploy (Render + MongoDB Atlas)
 
-1. Push this folder to a **private** GitHub repo.
-2. MongoDB Atlas → Network Access → allow `0.0.0.0/0` (Render has no fixed IP on small plans). Use a strong database user password.
-3. Render → New → **Web Service** → connect the repo.
-   - Build command: `npm run build`
-   - Start command: `npm start`
-   - Instance: **Starter** (the free one sleeps after 15 minutes and takes about a minute to wake up)
-   - Environment: everything from `server/.env`, plus `NODE_ENV=production`
-4. After the first deploy, open the Render Shell and run the seed command (section 1) to create admins.
-5. Add your domain in Render → Settings → Custom domains.
+`render.yaml` describes the whole setup, so Render needs only a few clicks.
+
+1. **Atlas → Network Access → Add IP Address → Allow access from anywhere (`0.0.0.0/0`).** Render's free and starter plans have no fixed IP. The database password is what protects it, so keep it long.
+2. **render.com → sign up with GitHub** and allow access to the `bioHelix` repo.
+3. **New → Blueprint →** pick the repo. Render reads `render.yaml` and asks for `MONGODB_URI`: paste the same value as in `server/.env`. Click **Apply**.
+4. Wait for the first build (a few minutes). The site opens at `https://biohelix-portal.onrender.com` (or a similar name Render shows).
+5. Admins already exist in Atlas if you ran `npm run seed` locally (same database). To add or reset an admin, run the seed command on your computer.
+6. Later: Cloudinary and Google keys go in Render → the service → **Environment**. A custom domain goes in **Settings → Custom Domains**.
+
+Every `git push` to `main` redeploys automatically.
+
+**Plan:** the Blueprint starts on the **free** plan. A free service sleeps after 15 minutes without visitors and takes about a minute to wake. Before BioHelix uses it daily, switch to **Starter** (about $7/month) in Render → the service → Settings → Instance Type.
 
 ## 5. Features
 

@@ -1,0 +1,24 @@
+# Render Blueprint: one web service that runs the API and serves the React app.
+# Render → New → Blueprint → pick this GitHub repo. It asks for MONGODB_URI once.
+services:
+  - type: web
+    name: biohelix-portal
+    runtime: node
+    region: singapore # closest Render region to Bangladesh
+    plan: free # free sleeps after 15 min idle; switch to "starter" (~$7/month) when BioHelix starts using it daily
+    buildCommand: npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    autoDeployTrigger: commit # every push to GitHub redeploys
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: JWT_SECRET
+        generateValue: true # Render makes a long random secret
+      - key: MONGODB_URI
+        sync: false # you paste the Atlas connection string when creating the Blueprint
+      # Add these later in Render → Environment when you set them up:
+      # CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+      # GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_PRIVATE_KEY
