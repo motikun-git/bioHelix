@@ -1,0 +1,16 @@
+{
+  "name": "biohelix-portal",
+  "private": true,
+  "description": "BioHelix Academic and Admission: student, exam and result management",
+  "scripts": {
+    "setup": "npm install --prefix server && npm install --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "dev:client": "npm run dev --prefix client",
+    "seed": "npm run seed --prefix server --",
+    "build": "npm install --prefix server && npm install --prefix client --include=dev && npm run build --prefix client",
+    "start": "npm start --prefix server"
+  },
+  "engines": {
+    "node": ">=20.19"
+  }
+}

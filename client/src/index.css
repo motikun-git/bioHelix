@@ -1,0 +1,48 @@
+@import 'tailwindcss';
+
+/* BioHelix palette, taken from the logo: deep navy ink, helix teal, cool paper */
+@theme {
+  --font-sans: 'Hind Siliguri', ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #16304f;
+  --color-ink-soft: #4a5d74;
+  --color-paper: #f3f6f5;
+  --color-line: #d9e2df;
+  --color-helix: #1b8a86;
+  --color-helix-dark: #146c69;
+  --color-helix-tint: #ddefea;
+  --color-pass: #2e7d4f;
+  --color-pass-tint: #e2f2e8;
+  --color-fail: #b4424c;
+  --color-fail-tint: #f8e4e6;
+  --color-draft: #9a6614;
+  --color-draft-tint: #f8eedc;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-paper text-ink antialiased;
+    font-feature-settings: 'tnum' 1;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-helix);
+    outline-offset: 2px;
+  }
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
