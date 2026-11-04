@@ -24,12 +24,21 @@ export default function Dashboard() {
         <div className="space-y-6">
           <PageHeader title={`Hello, ${user?.name?.split(' ')[0] || 'admin'}`} subtitle={dayLabel(d.today, true)} />
 
-          {d.students.total > 0 && (d.lastBackupAt === null || daysSince(d.lastBackupAt) > 7) && (
+          {d.role === 'admin' && d.students.total > 0 && (d.lastBackupAt === null || daysSince(d.lastBackupAt) > 7) && (
             <Link to="/admin/backup" className="flex items-center justify-between gap-3 rounded-xl border border-draft/40 bg-draft-tint px-4 py-3 text-draft">
               <span className="font-semibold">
                 {d.lastBackupAt ? `Last backup was ${daysSince(d.lastBackupAt)} days ago.` : 'No backup taken yet.'} Download one now.
               </span>
               <span className="shrink-0 font-semibold underline">Backup</span>
+            </Link>
+          )}
+
+          {d.newInquiries > 0 && (
+            <Link to="/admin/inquiries" className="flex items-center justify-between gap-3 rounded-xl border border-helix/40 bg-helix-tint px-4 py-3 text-helix-dark">
+              <span className="font-semibold">
+                {d.newInquiries} new admission {d.newInquiries === 1 ? 'inquiry' : 'inquiries'} from the website. Call them back.
+              </span>
+              <span className="shrink-0 font-semibold underline">Open</span>
             </Link>
           )}
 
@@ -78,8 +87,14 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Stat value={d.students.active} label="Active students" to="/admin/students" />
-            <Stat value={taka(d.fees.collected)} label={`Collected in ${monthLabel(d.fees.month, true)}`} to="/admin/fees?tab=payments" />
-            <Stat value={d.fees.studentsWithDue} label={`Students with dues (${taka(d.fees.totalDue)})`} to="/admin/fees?tab=dues" tone={d.fees.studentsWithDue ? 'text-fail' : ''} />
+            {d.fees ? (
+              <>
+                <Stat value={taka(d.fees.collected)} label={`Collected in ${monthLabel(d.fees.month, true)}`} to="/admin/fees?tab=payments" />
+                <Stat value={d.fees.studentsWithDue} label={`Students with dues (${taka(d.fees.totalDue)})`} to="/admin/fees?tab=dues" tone={d.fees.studentsWithDue ? 'text-fail' : ''} />
+              </>
+            ) : (
+              <Stat value={d.batches.active} label="Running batches" to="/admin/batches" />
+            )}
             <Stat value={d.exams.imported + d.exams.draft} label="Exams not published" to="/admin/exams" />
           </div>
 

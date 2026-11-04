@@ -247,13 +247,13 @@ export function Loading({ state, children }) {
 }
 
 /** ‹ November 2026 › */
-export function MonthPicker({ value, onChange, max }) {
+export function MonthPicker({ value, onChange, max, locale }) {
   return (
     <div className="inline-flex items-center rounded-lg border border-line bg-white">
       <button type="button" onClick={() => onChange(shiftMonth(value, -1))} className="min-h-11 px-3 text-lg text-ink-soft hover:text-ink" aria-label="Previous month">
         ‹
       </button>
-      <span className="min-w-36 text-center font-semibold">{monthLabel(value)}</span>
+      <span className="min-w-36 text-center font-semibold">{monthLabel(value, false, locale)}</span>
       <button
         type="button"
         onClick={() => onChange(shiftMonth(value, 1))}

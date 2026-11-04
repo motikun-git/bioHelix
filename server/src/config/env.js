@@ -22,6 +22,14 @@ export const env = {
     apiKey: process.env.CLOUDINARY_API_KEY,
     apiSecret: process.env.CLOUDINARY_API_SECRET,
   },
+  sms: {
+    apiKey: process.env.SMS_API_KEY,
+    senderId: process.env.SMS_SENDER_ID || '',
+    // SMS_DRY_RUN=1: write to the SMS log without really sending (for testing)
+    dryRun: process.env.SMS_DRY_RUN === '1',
+  },
+  // The site's own address, used in SMS text (e.g. https://biohelix.example.com)
+  publicUrl: (process.env.PUBLIC_URL || '').replace(/\/$/, ''),
   google: {
     email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     // .env files store the key on one line with literal "\n"
@@ -33,3 +41,4 @@ export const cloudinaryEnabled = Boolean(
   env.cloudinary.cloudName && env.cloudinary.apiKey && env.cloudinary.apiSecret,
 );
 export const googleEnabled = Boolean(env.google.email && env.google.privateKey);
+export const smsEnabled = Boolean(env.sms.apiKey || env.sms.dryRun);

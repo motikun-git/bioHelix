@@ -1,5 +1,6 @@
 import { NavLink, Outlet } from 'react-router';
 import { useAuth } from '../lib/auth.jsx';
+import { LangToggle, useT } from '../lib/i18n.jsx';
 import { Logo } from './Logo.jsx';
 import { cx } from './ui.jsx';
 
@@ -16,6 +17,13 @@ const icons = {
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
   results: 'M5 20V10M12 20V4M19 20v-7',
   backup: 'M12 3v12M7 10l5 5 5-5M4 17v3h16v-3',
+  team: 'M9 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM3 20c0-3 2.7-5 6-5s6 2 6 5M16 5.5a3 3 0 0 1 0 5.5M18 15c1.8.6 3 2.4 3 5',
+  sms: 'M4 5h16v11H9l-5 4zM8 9h8M8 12h5',
+  inquiries: 'M4 4h16v16H4zM4 13h5l1 2h4l1-2h5',
+  website: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM3 12h18M12 3c2.5 2.5 3.5 5.5 3.5 9s-1 6.5-3.5 9c-2.5-2.5-3.5-5.5-3.5-9s1-6.5 3.5-9z',
+  key: 'M14 4a6 6 0 1 1-4.2 10.2L4 20v-3h3v-3h3l.8-.8A6 6 0 0 1 14 4z',
+  materials: 'M4 5c3-1 5-1 8 1 3-2 5-2 8-1v14c-3-1-5-1-8 1-3-2-5-2-8-1zM12 6v14',
+  accounts: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
 };
 
 export function Icon({ name, className }) {
@@ -26,23 +34,36 @@ export function Icon({ name, className }) {
   );
 }
 
+// adminOnly items are hidden from teachers (the server blocks them too)
 export const adminNav = [
   { to: '/admin', label: 'Home', icon: 'home', end: true },
   { to: '/admin/students', label: 'Students', icon: 'students' },
   { to: '/admin/attendance', label: 'Attendance', icon: 'attendance' },
   { to: '/admin/exams', label: 'Exams', icon: 'exams' },
-  { to: '/admin/fees', label: 'Fees', icon: 'fees' },
+  { to: '/admin/fees', label: 'Fees', icon: 'fees', adminOnly: true },
   { to: '/admin/notices', label: 'Notices', icon: 'notices' },
   { to: '/admin/calendar', label: 'Calendar', icon: 'calendar' },
   { to: '/admin/batches', label: 'Batches', icon: 'batches' },
-  { to: '/admin/backup', label: 'Backup', icon: 'backup' },
+  { to: '/admin/materials', label: 'Lecture sheets', icon: 'materials' },
+  { to: '/admin/accounts', label: 'Accounts', icon: 'accounts', adminOnly: true },
+  { to: '/admin/sms', label: 'SMS', icon: 'sms', adminOnly: true },
+  { to: '/admin/inquiries', label: 'Admission inquiries', icon: 'inquiries', adminOnly: true },
+  { to: '/admin/website', label: 'Public website', icon: 'website', adminOnly: true },
+  { to: '/admin/team', label: 'Team', icon: 'team', adminOnly: true },
+  { to: '/admin/backup', label: 'Backup', icon: 'backup', adminOnly: true },
 ];
+
+function useNav() {
+  const { user } = useAuth();
+  return adminNav.filter((item) => !item.adminOnly || user?.role === 'admin');
+}
 
 // Phone bottom bar: the four things done daily, everything else under More
 const mobileTabs = [...adminNav.slice(0, 4), { to: '/admin/more', label: 'More', icon: 'more' }];
 
 export function AdminLayout() {
   const { user, logout } = useAuth();
+  const nav = useNav();
   const signOut = async () => {
     await logout('/admin/login');
   };
@@ -52,14 +73,14 @@ export function AdminLayout() {
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh flex-col bg-ink px-4 py-6 text-white lg:flex print:hidden">
         <Logo light className="px-2" />
-        <nav className="mt-8 space-y-1">
-          {adminNav.map((item) => (
+        <nav className="mt-6 space-y-0.5 overflow-y-auto">
+          {nav.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
               end={item.end}
               className={({ isActive }) =>
-                cx('flex items-center gap-3 rounded-lg px-3 py-2.5 font-medium', isActive ? 'bg-white/12 text-white' : 'text-white/70 hover:text-white')
+                cx('flex items-center gap-3 rounded-lg px-3 py-2 font-medium', isActive ? 'bg-white/12 text-white' : 'text-white/70 hover:text-white')
               }
             >
               <Icon name={item.icon} />
@@ -68,7 +89,9 @@ export function AdminLayout() {
           ))}
         </nav>
         <div className="mt-auto border-t border-white/15 pt-4 text-sm">
-          <p className="px-3 font-semibold">{user?.name}</p>
+          <p className="px-3 font-semibold">
+            {user?.name} {user?.role === 'teacher' && <span className="font-normal text-white/60">(teacher)</span>}
+          </p>
           <NavLink to="/admin/password" className="block px-3 py-1 text-white/70 hover:text-white">
             Change password
           </NavLink>
@@ -113,7 +136,7 @@ export function AdminLayout() {
 /** Phone "More" screen: the admin pages that don't fit in the bottom bar. */
 export function AdminMore() {
   const { user, logout } = useAuth();
-  const links = [...adminNav.slice(4), { to: '/admin/password', label: 'Change password', icon: 'logout' }];
+  const links = [...useNav().slice(4), { to: '/admin/password', label: 'Change password', icon: 'key' }];
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">More</h1>
@@ -141,13 +164,16 @@ export function AdminMore() {
 }
 
 const portalTabs = [
-  { to: '/portal', label: 'Results', icon: 'results', end: true },
-  { to: '/portal/attendance', label: 'Attendance', icon: 'attendance' },
-  { to: '/portal/schedule', label: 'Routine', icon: 'calendar' },
-  { to: '/portal/fees', label: 'Fees', icon: 'fees' },
+  { to: '/portal', label: 'portal.results', icon: 'results', end: true },
+  { to: '/portal/exams', label: 'portal.exams', icon: 'exams' },
+  { to: '/portal/materials', label: 'portal.materials', icon: 'notices' },
+  { to: '/portal/attendance', label: 'portal.attendance', icon: 'attendance' },
+  { to: '/portal/schedule', label: 'portal.routine', icon: 'calendar' },
+  { to: '/portal/fees', label: 'portal.fees', icon: 'fees' },
 ];
 
 export function PortalLayout() {
+  const { t } = useT();
   const { user, logout } = useAuth();
   const showTabs = !user?.mustChangePassword;
   return (
@@ -158,9 +184,10 @@ export function PortalLayout() {
             <Logo light />
           </NavLink>
           <div className="flex items-center gap-1 text-sm">
+            <LangToggle />
             {showTabs && (
-              <NavLink to="/portal/password" className="rounded-md px-2 py-2 text-white/80 hover:text-white">
-                Password
+              <NavLink to="/portal/password" className="hidden rounded-md px-2 py-2 text-white/80 hover:text-white sm:block">
+                {t('portal.password')}
               </NavLink>
             )}
             <button
@@ -169,26 +196,26 @@ export function PortalLayout() {
               }}
               className="rounded-md px-2 py-2 text-white/80 hover:text-white"
             >
-              Log out
+              {t('portal.logout')}
             </button>
           </div>
         </div>
         {showTabs && (
-          <nav className="mx-auto grid max-w-3xl grid-cols-4 px-2">
-            {portalTabs.map((t) => (
+          <nav className="mx-auto flex max-w-3xl overflow-x-auto px-2 [scrollbar-width:none]">
+            {portalTabs.map((tab) => (
               <NavLink
-                key={t.to}
-                to={t.to}
-                end={t.end}
+                key={tab.to}
+                to={tab.to}
+                end={tab.end}
                 className={({ isActive }) =>
                   cx(
-                    'flex items-center justify-center gap-1.5 border-b-[3px] py-2.5 text-sm font-semibold',
+                    'flex shrink-0 grow items-center justify-center gap-1.5 whitespace-nowrap border-b-[3px] px-3 py-2.5 text-sm font-semibold',
                     isActive ? 'border-[#5cc7bd] text-white' : 'border-transparent text-white/65 hover:text-white',
                   )
                 }
               >
-                <Icon name={t.icon} className="hidden size-4 sm:block" />
-                {t.label}
+                <Icon name={tab.icon} className="hidden size-4 sm:block" />
+                {t(tab.label)}
               </NavLink>
             ))}
           </nav>
@@ -196,6 +223,11 @@ export function PortalLayout() {
       </header>
       <main className="mx-auto max-w-3xl px-4 pb-12 pt-6">
         <Outlet />
+        {showTabs && (
+          <NavLink to="/portal/password" className="mt-10 block text-center text-sm font-semibold text-helix-dark sm:hidden">
+            {t('pw.title')}
+          </NavLink>
+        )}
       </main>
     </div>
   );

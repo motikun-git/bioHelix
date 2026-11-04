@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { notifyAbsent } from '../services/sms.js';
 import { z } from 'zod';
 import { Attendance, Batch, Student } from '../models/index.js';
 import { HttpError, assertObjectId, parse } from '../utils/http.js';
@@ -77,6 +78,7 @@ router.put('/', async (req, res) => {
     },
     { upsert: true, returnDocument: 'after', runValidators: true },
   );
+  notifyAbsent(sheet);
   const counts = { present: 0, absent: 0, late: 0 };
   sheet.records.forEach((r) => (counts[r.status] += 1));
   res.json({ ok: true, date: sheet.date, counts });

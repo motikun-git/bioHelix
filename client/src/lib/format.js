@@ -1,8 +1,10 @@
-const dateFmt = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+const dateFmts = {};
 
-export function formatDate(value) {
+/** "3 Nov 2026" (or "৩ নভে, ২০২৬" with locale 'bn-BD') */
+export function formatDate(value, locale = 'en-GB') {
   if (!value) return '';
-  return dateFmt.format(new Date(value));
+  dateFmts[locale] ||= new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dhaka' });
+  return dateFmts[locale].format(new Date(value));
 }
 
 export function toDateInput(value) {
@@ -10,12 +12,16 @@ export function toDateInput(value) {
   return new Date(value).toISOString().slice(0, 10);
 }
 
-/** "16:30" → "4:30 pm" */
-export function formatTime(hhmm) {
+/** "16:30" → "4:30 pm" (Bangla: "বিকাল 4:30") */
+export function formatTime(hhmm, locale = 'en-GB') {
   if (!hhmm) return '';
   const [h, m] = hhmm.split(':').map(Number);
-  const suffix = h >= 12 ? 'pm' : 'am';
-  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${suffix}`;
+  const clock = `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')}`;
+  if (locale === 'bn-BD') {
+    const part = h < 5 ? 'রাত' : h < 12 ? 'সকাল' : h < 15 ? 'দুপুর' : h < 18 ? 'বিকাল' : h < 20 ? 'সন্ধ্যা' : 'রাত';
+    return `${part} ${clock.replace(/\d/g, (d) => '০১২৩৪৫৬৭৮৯'[d])}`;
+  }
+  return `${clock} ${h >= 12 ? 'pm' : 'am'}`;
 }
 
 export function schedule(batch) {
@@ -32,9 +38,10 @@ export function ordinal(n) {
   return `${n}${{ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th'}`;
 }
 
-export function num(value, digits = 1) {
+/** 42 → "42", 2.75 → "2.75", 7.3333 → "7.33" (online exams use 0.25 negative marks). */
+export function num(value, digits = 2) {
   if (value === null || value === undefined) return '–';
-  return Number.isInteger(value) ? String(value) : value.toFixed(digits);
+  return Number.isInteger(value) ? String(value) : String(Number(value.toFixed(digits)));
 }
 
 /** Download rows as a CSV file (used for student login sheets). */
@@ -62,9 +69,9 @@ export function thisMonth() {
 }
 
 /** "2026-11" → "November 2026" */
-export function monthLabel(month, short = false) {
+export function monthLabel(month, short = false, locale = 'en-GB') {
   const [y, m] = month.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, 15)).toLocaleString('en-GB', { month: short ? 'short' : 'long', year: 'numeric', timeZone: 'UTC' });
+  return new Date(Date.UTC(y, m - 1, 15)).toLocaleString(locale, { month: short ? 'short' : 'long', year: 'numeric', timeZone: 'UTC' });
 }
 
 /** shiftMonth("2026-01", -1) → "2025-12" */
@@ -75,9 +82,9 @@ export function shiftMonth(month, delta) {
 }
 
 /** "2026-11-03" → "Tue, 3 Nov" */
-export function dayLabel(date, withYear = false) {
+export function dayLabel(date, withYear = false, locale = 'en-GB') {
   const [y, m, d] = date.split('-').map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-GB', {
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(locale, {
     weekday: 'short',
     day: 'numeric',
     month: 'short',

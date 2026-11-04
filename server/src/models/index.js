@@ -8,6 +8,9 @@ const adminSchema = new Schema(
     name: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     passwordHash: { type: String, required: true },
+    // admin: everything. teacher: attendance, exams, notices, calendar (no fees, backup or team)
+    role: { type: String, enum: ['admin', 'teacher'], default: 'admin' },
+    mustChangePassword: { type: Boolean, default: false },
     lastLoginAt: Date,
   },
   { timestamps: true },
@@ -74,7 +77,7 @@ const examSchema = new Schema(
     program: { type: ObjectId, ref: 'Program', required: true },
     batches: [{ type: ObjectId, ref: 'Batch', required: true }],
     date: { type: Date, required: true },
-    mode: { type: String, enum: ['google_form', 'offline'], required: true },
+    mode: { type: String, enum: ['google_form', 'offline', 'online'], required: true },
     totalMarks: { type: Number, required: true, min: 1 },
     passMarks: { type: Number, min: 0, default: 0 },
     negativeMark: { type: Number, min: 0, default: 0 },
@@ -85,6 +88,20 @@ const examSchema = new Schema(
     sheetHeaders: [String],
     // Question analysis: which sheet column is which question, its answer and chapter
     questions: [{ _id: false, column: Number, text: String, answer: String, chapter: String }],
+    // Online MCQ exam taken on this website
+    mcq: [
+      {
+        _id: false,
+        text: { type: String, required: true },
+        options: [String],
+        answer: Number, // index into options
+        chapter: { type: String, default: '' },
+        explanation: { type: String, default: '' },
+      },
+    ],
+    opensAt: Date,
+    closesAt: Date,
+    durationMinutes: { type: Number, min: 1, max: 600, default: 30 },
     status: { type: String, enum: ['draft', 'imported', 'published'], default: 'draft' },
     publishedAt: Date,
     lastImport: {
@@ -107,7 +124,7 @@ const resultSchema = new Schema(
     marks: { type: Number, default: null },
     isAbsent: { type: Boolean, default: false },
     rank: { type: Number, default: null },
-    source: { type: String, enum: ['sheet', 'csv', 'manual'], required: true },
+    source: { type: String, enum: ['sheet', 'csv', 'manual', 'online'], required: true },
     // The student's full response row from the sheet (for question-wise analysis)
     row: [String],
   },
@@ -180,6 +197,98 @@ const paymentSchema = new Schema(
 paymentSchema.index({ student: 1, kind: 1, month: 1 });
 paymentSchema.index({ paidAt: -1 });
 
+const inquirySchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    phone: { type: String, required: true, trim: true },
+    guardianPhone: { type: String, trim: true, default: '' },
+    program: { type: ObjectId, ref: 'Program' },
+    college: { type: String, trim: true, default: '' },
+    message: { type: String, trim: true, default: '' },
+    status: { type: String, enum: ['new', 'called', 'admitted', 'closed'], default: 'new' },
+    note: { type: String, trim: true, default: '' }, // admin's own note
+  },
+  { timestamps: true },
+);
+inquirySchema.index({ status: 1, createdAt: -1 });
+
+// Students shown on the public Achievements page (only with permission)
+const achievementSchema = new Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    result: { type: String, required: true, trim: true }, // e.g. "Dhaka Medical College"
+    year: { type: String, trim: true, default: '' },
+    quote: { type: String, trim: true, default: '' },
+    order: { type: Number, default: 0 },
+  },
+  { timestamps: true },
+);
+
+// One student's sitting of an online exam
+const attemptSchema = new Schema(
+  {
+    exam: { type: ObjectId, ref: 'Exam', required: true },
+    student: { type: ObjectId, ref: 'Student', required: true },
+    startedAt: { type: Date, required: true },
+    deadline: { type: Date, required: true },
+    answers: [{ type: Number, default: null }], // chosen option index per question, null = skipped
+    submittedAt: Date,
+    marks: Number,
+    correct: Number,
+    wrong: Number,
+  },
+  { timestamps: true },
+);
+attemptSchema.index({ exam: 1, student: 1 }, { unique: true });
+
+// Lecture sheets, class notes, recorded classes: links to Google Drive / YouTube / PDF
+const materialSchema = new Schema(
+  {
+    title: { type: String, required: true, trim: true },
+    kind: { type: String, enum: ['sheet', 'video', 'link'], default: 'sheet' },
+    url: { type: String, required: true, trim: true },
+    note: { type: String, trim: true, default: '' },
+    program: { type: ObjectId, ref: 'Program', required: true },
+    batches: [{ type: ObjectId, ref: 'Batch' }], // empty = every batch of the program
+    chapter: { type: String, trim: true, default: '' },
+    addedBy: { type: ObjectId, ref: 'Admin' },
+  },
+  { timestamps: true },
+);
+materialSchema.index({ program: 1, createdAt: -1 });
+
+// Money going out (rent, teacher salary...), to see income vs expense
+const expenseSchema = new Schema(
+  {
+    date: { type: String, required: true, match: /^\d{4}-\d{2}-\d{2}$/ },
+    category: { type: String, enum: ['rent', 'salary', 'utilities', 'materials', 'marketing', 'other'], required: true },
+    amount: { type: Number, required: true, min: 1 },
+    paidTo: { type: String, trim: true, default: '' },
+    note: { type: String, trim: true, default: '' },
+    addedBy: { type: ObjectId, ref: 'Admin' },
+  },
+  { timestamps: true },
+);
+expenseSchema.index({ date: -1 });
+
+// Every SMS the app tried to send (newest first on the SMS page)
+const smsLogSchema = new Schema(
+  {
+    to: { type: String, required: true }, // 8801XXXXXXXXX
+    message: { type: String, required: true },
+    kind: { type: String, enum: ['absent', 'result', 'payment', 'manual', 'test', 'reset', 'due'], required: true },
+    status: { type: String, enum: ['sent', 'failed'], required: true },
+    error: { type: String, default: '' },
+    requestId: { type: String, default: '' },
+    student: { type: ObjectId, ref: 'Student', default: null },
+    // What the SMS was about (e.g. "absent:<batch>:2026-11-03"), so the same news is never sent twice
+    ref: { type: String, default: '' },
+  },
+  { timestamps: true },
+);
+smsLogSchema.index({ createdAt: -1 });
+smsLogSchema.index({ ref: 1, student: 1 });
+
 // Small key/value store for app-wide facts (e.g. when the last backup was taken)
 const settingSchema = new Schema(
   {
@@ -201,3 +310,9 @@ export const Notice = model('Notice', noticeSchema);
 export const Event = model('Event', eventSchema);
 export const Payment = model('Payment', paymentSchema);
 export const Setting = model('Setting', settingSchema);
+export const Inquiry = model('Inquiry', inquirySchema);
+export const Achievement = model('Achievement', achievementSchema);
+export const SmsLog = model('SmsLog', smsLogSchema);
+export const Attempt = model('Attempt', attemptSchema);
+export const Material = model('Material', materialSchema);
+export const Expense = model('Expense', expenseSchema);

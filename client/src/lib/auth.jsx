@@ -56,7 +56,17 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthContext);
 
-/** Wrap routes that need a logged-in admin or student. */
+const STAFF = ['admin', 'teacher'];
+
+/** True when the logged-in staff member is an admin (not a teacher). */
+export function useIsAdmin() {
+  return useAuth().user?.role === 'admin';
+}
+
+/**
+ * Wrap routes that need a login. role: 'student', 'staff' (admins and teachers)
+ * or 'admin' (admins only; teachers are sent to the dashboard).
+ */
 export function RequireRole({ role, children }) {
   const { user } = useAuth();
   const location = useLocation();
@@ -67,11 +77,15 @@ export function RequireRole({ role, children }) {
       </div>
     );
   }
-  if (!user || user.role !== role) {
-    return <Navigate to={role === 'admin' ? '/admin/login' : '/login'} replace state={{ from: location.pathname }} />;
+  const isStaffRoute = role !== 'student';
+  const allowed = role === 'student' ? user?.role === 'student' : role === 'staff' ? STAFF.includes(user?.role) : user?.role === 'admin';
+  if (!user || (isStaffRoute && !STAFF.includes(user.role)) || (!isStaffRoute && user.role !== 'student')) {
+    return <Navigate to={isStaffRoute ? '/admin/login' : '/login'} replace state={{ from: location.pathname }} />;
   }
-  if (role === 'student' && user.mustChangePassword && location.pathname !== '/portal/password') {
-    return <Navigate to="/portal/password" replace />;
+  if (!allowed) return <Navigate to="/admin" replace />;
+  const passwordPage = isStaffRoute ? '/admin/password' : '/portal/password';
+  if (user.mustChangePassword && location.pathname !== passwordPage) {
+    return <Navigate to={passwordPage} replace />;
   }
   return children;
 }

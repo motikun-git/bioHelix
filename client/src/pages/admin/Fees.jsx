@@ -269,6 +269,36 @@ function CollectPayment({ initialStudentId }) {
   );
 }
 
+/** One SMS to every guardian on the due list (at most once a day each). */
+function DueSms({ batch, count }) {
+  const [msg, setMsg] = useState({ tone: 'error', text: '' });
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <Button
+        variant="secondary"
+        loading={busy}
+        onClick={async () => {
+          if (!window.confirm(`Send a fee reminder SMS to ${count} guardians?`)) return;
+          setBusy(true);
+          setMsg({ text: '' });
+          try {
+            const r = await post('/sms/dues', batch ? { batch } : {});
+            setMsg({ tone: r.failed ? 'warn' : 'success', text: `Sent ${r.sent}${r.failed ? `, failed ${r.failed}` : ''}${r.skipped ? `, skipped ${r.skipped} (no number or already reminded today)` : ''}.` });
+          } catch (err) {
+            setMsg({ tone: 'error', text: err.message });
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        SMS reminder to all
+      </Button>
+      <Alert tone={msg.tone}>{msg.text}</Alert>
+    </div>
+  );
+}
+
 function DueList() {
   const batches = useBatches('?active=true');
   const [batch, setBatch] = useState('');
@@ -293,9 +323,12 @@ function DueList() {
             <Empty title="Nobody owes anything">Everyone has paid up to {monthLabel(month)}.</Empty>
           ) : (
             <>
-              <p className="font-semibold">
-                {data.items.length} students, {taka(data.total)} due in total
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="font-semibold">
+                  {data.items.length} students, {taka(data.total)} due in total
+                </p>
+                {month === thisMonth() && <DueSms batch={batch} count={data.items.length} />}
+              </div>
               <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white">
                 {data.items.map((d) => (
                   <li key={d._id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">

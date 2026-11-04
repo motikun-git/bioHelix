@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { notifyPayment } from '../services/sms.js';
 import { z } from 'zod';
 import { Admin, Payment, Student } from '../models/index.js';
 import { HttpError, assertObjectId, parse } from '../utils/http.js';
@@ -45,6 +46,7 @@ router.post('/payments', async (req, res) => {
   if (data.kind !== 'monthly') delete data.month;
   if (data.paidAt && localDate(data.paidAt) > localDate()) throw new HttpError(400, 'Payment date cannot be in the future');
   const payment = await Payment.create({ ...data, receiptNo: await nextReceiptNo(data.paidAt), receivedBy: req.user.id });
+  notifyPayment(payment);
   res.status(201).json(payment);
 });
 

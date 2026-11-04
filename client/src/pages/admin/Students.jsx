@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { get } from '../../lib/api.js';
 import { useBatches } from '../../lib/data.js';
+import { useIsAdmin } from '../../lib/auth.jsx';
 import { Button, ButtonLink, Empty, Input, Loading, PageHeader, Select, StatusBadge, useLoad } from '../../components/ui.jsx';
 
 export function Avatar({ url, name, size = 'size-10' }) {
@@ -20,6 +21,7 @@ export function Avatar({ url, name, size = 'size-10' }) {
 }
 
 export default function Students() {
+  const isAdmin = useIsAdmin();
   const [params, setParams] = useSearchParams();
   const batches = useBatches();
   const batch = params.get('batch') || '';
@@ -50,11 +52,18 @@ export default function Students() {
       <PageHeader
         title="Students"
         action={
-          <div className="flex gap-2">
-            <ButtonLink to="/admin/students/import" variant="secondary">
-              Import CSV
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink to={`/admin/students/cards${batch ? `?batch=${batch}` : ''}`} variant="secondary">
+              ID cards
             </ButtonLink>
-            <ButtonLink to="/admin/students/new">Add student</ButtonLink>
+            {isAdmin && (
+              <>
+                <ButtonLink to="/admin/students/import" variant="secondary">
+                  Import CSV
+                </ButtonLink>
+                <ButtonLink to="/admin/students/new">Add student</ButtonLink>
+              </>
+            )}
           </div>
         }
       />

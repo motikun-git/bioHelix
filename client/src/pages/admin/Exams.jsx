@@ -5,6 +5,14 @@ import { useBatches, usePrograms } from '../../lib/data.js';
 import { formatDate, num, toDateInput } from '../../lib/format.js';
 import { Alert, Button, Empty, Field, Input, Loading, Modal, PageHeader, Select, StatusBadge, cx, useLoad } from '../../components/ui.jsx';
 
+/** Date → value for <input type="datetime-local"> in this computer's time zone. */
+export function toLocalInput(value) {
+  if (!value) return '';
+  const d = new Date(value);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function ExamForm({ initial, onSaved, onCancel }) {
   const programs = usePrograms();
   const batches = useBatches('?active=true');
@@ -18,8 +26,12 @@ export function ExamForm({ initial, onSaved, onCancel }) {
           mode: initial.mode,
           totalMarks: initial.totalMarks,
           passMarks: initial.passMarks,
+          negativeMark: initial.negativeMark || 0,
+          durationMinutes: initial.durationMinutes || 30,
+          opensAt: toLocalInput(initial.opensAt),
+          closesAt: toLocalInput(initial.closesAt),
         }
-      : { title: '', program: '', batches: [], date: toDateInput(new Date()), mode: 'google_form', totalMarks: '', passMarks: '' },
+      : { title: '', program: '', batches: [], date: toDateInput(new Date()), mode: 'google_form', totalMarks: '', passMarks: '', negativeMark: 0, durationMinutes: 30, opensAt: '', closesAt: '' },
   );
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -36,7 +48,16 @@ export function ExamForm({ initial, onSaved, onCancel }) {
       program,
       totalMarks: Number(form.totalMarks),
       passMarks: Number(form.passMarks) || 0,
+      negativeMark: Number(form.negativeMark) || 0,
+      durationMinutes: Number(form.durationMinutes) || 30,
+      opensAt: form.opensAt ? new Date(form.opensAt).toISOString() : null,
+      closesAt: form.closesAt ? new Date(form.closesAt).toISOString() : null,
     };
+    if (body.mode !== 'online') {
+      delete body.opensAt;
+      delete body.closesAt;
+      delete body.durationMinutes;
+    }
     try {
       const exam = initial ? await patch(`/exams/${initial._id}`, body) : await post('/exams', body);
       onSaved(exam);
@@ -93,10 +114,11 @@ export function ExamForm({ initial, onSaved, onCancel }) {
       </fieldset>
       <fieldset>
         <legend className="mb-1 text-sm font-semibold">How are marks collected?</legend>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-3">
           {[
             ['google_form', 'Google Form', 'Marks come from the form’s response sheet'],
             ['offline', 'Offline (paper)', 'You type each student’s marks'],
+            ['online', 'Online MCQ on this website', 'Students sit it in the portal with a timer; marked automatically'],
           ].map(([value, label, hint]) => (
             <label key={value} className={cx('cursor-pointer rounded-lg border p-3', form.mode === value ? 'border-helix bg-helix-tint' : 'border-line bg-white')}>
               <input type="radio" name="mode" value={value} checked={form.mode === value} onChange={set('mode')} className="sr-only" />
@@ -114,6 +136,25 @@ export function ExamForm({ initial, onSaved, onCancel }) {
           <Input type="number" inputMode="decimal" min="0" step="any" value={form.passMarks} onChange={set('passMarks')} />
         </Field>
       </div>
+      {form.mode === 'online' && (
+        <fieldset className="space-y-4 rounded-lg bg-paper p-3">
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Time for each student (minutes)">
+              <Input type="number" min="1" max="600" value={form.durationMinutes} onChange={set('durationMinutes')} required />
+            </Field>
+            <Field label="Cut per wrong answer" hint="e.g. 0.25. 0 = no negative marking">
+              <Input type="number" min="0" max="10" step="any" value={form.negativeMark} onChange={set('negativeMark')} />
+            </Field>
+            <Field label="Opens at" hint="Empty = students can’t see it yet">
+              <Input type="datetime-local" value={form.opensAt} onChange={set('opensAt')} />
+            </Field>
+            <Field label="Closes at" hint="Last time to start. Empty = no end">
+              <Input type="datetime-local" value={form.closesAt} onChange={set('closesAt')} />
+            </Field>
+          </div>
+          <p className="text-sm text-ink-soft">Each student gets the full time from when they start, but never past the closing time. Marks per question = total marks ÷ number of questions.</p>
+        </fieldset>
+      )}
       <Alert>{error}</Alert>
       <div className="flex gap-2">
         <Button type="submit" loading={busy} disabled={!form.batches.length}>

@@ -1,5 +1,9 @@
 import { Router } from 'express';
-import { Exam, Notice, Result, Student } from '../models/index.js';
+import { z } from 'zod';
+import { Attempt, Exam, Material, Notice, Result, Student } from '../models/index.js';
+import { GRACE_MS, examWindow, finishAttempt, finishExpired, paperFor, scoreAnswers, LETTERS } from '../services/online.js';
+import { getSite } from './site.js';
+import { parse } from '../utils/http.js';
 import { HttpError, assertObjectId } from '../utils/http.js';
 import { MONTH_RE, localDate, localMonth, monthRange } from '../utils/helpers.js';
 import { examStats } from '../services/results.js';
@@ -73,7 +77,17 @@ router.get('/results/:examId', async (req, res) => {
   const [result] = await publishedResults(req.user.id, { _id: req.params.examId });
   if (!result) throw new HttpError(404, 'Result not found');
   const chapters = result.isAbsent ? [] : await studentChapters(req.user.id, { _id: result.exam._id });
-  res.json({ ...result, chapters });
+  // Merit list: the top 10 (ties included), like the printed list on the notice board
+  let top = [];
+  if ((await getSite()).showMeritList) {
+    const rows = await Result.find({ exam: result.exam._id, isAbsent: false, rank: { $ne: null, $lte: 10 } })
+      .sort({ rank: 1, marks: -1 })
+      .limit(30)
+      .populate('student', 'name college')
+      .lean();
+    top = rows.map((r) => ({ rank: r.rank, marks: r.marks, name: r.student?.name || '', college: r.student?.college || '', me: String(r.student?._id) === String(req.user.id) }));
+  }
+  res.json({ ...result, chapters, top, online: result.exam.mode === 'online' });
 });
 
 /** Chapter-wise accuracy across all published exams with question analysis. */
@@ -140,6 +154,134 @@ router.get('/fees', async (req, res) => {
       method: p.method,
       paidAt: p.paidAt,
     })),
+  });
+});
+
+// ---------- Study materials ----------
+router.get('/materials', async (req, res) => {
+  const s = await myBatch(req.user.id);
+  const items = await Material.find({ program: s.program, $or: [{ batches: { $size: 0 } }, { batches: s.batch._id }] })
+    .select('title kind url note chapter createdAt')
+    .sort({ createdAt: -1 })
+    .limit(300)
+    .lean();
+  res.json(items);
+});
+
+// ---------- Online exams ----------
+async function myOnlineExam(req) {
+  assertObjectId(req.params.examId, 'exam');
+  const s = await myBatch(req.user.id);
+  const exam = await Exam.findOne({ _id: req.params.examId, mode: 'online', batches: s.batch._id, opensAt: { $ne: null } });
+  if (!exam || !exam.mcq.length) throw new HttpError(404, 'Exam not found');
+  return exam;
+}
+
+/** Online exams for my batch: upcoming, open now, and past ones. */
+router.get('/exams', async (req, res) => {
+  const s = await myBatch(req.user.id);
+  // Only exams with an opening time are shown (admins set it when the questions are ready)
+  const exams = await Exam.find({ mode: 'online', batches: s.batch._id, 'mcq.0': { $exists: true }, opensAt: { $ne: null } })
+    .select('title date opensAt closesAt durationMinutes totalMarks negativeMark status mcq')
+    .sort({ date: -1 })
+    .limit(100);
+  const attempts = await Attempt.find({ student: req.user.id, exam: { $in: exams.map((e) => e._id) } }).lean();
+  const byExam = new Map(attempts.map((a) => [String(a.exam), a]));
+  const now = new Date();
+  res.json(
+    exams.map((e) => {
+      const a = byExam.get(String(e._id));
+      const timeUp = a && !a.submittedAt && now > new Date(a.deadline.getTime() + GRACE_MS);
+      return {
+        _id: e._id,
+        title: e.title,
+        date: e.date,
+        opensAt: e.opensAt,
+        closesAt: e.closesAt,
+        durationMinutes: e.durationMinutes,
+        questions: e.mcq.length,
+        totalMarks: e.totalMarks,
+        negativeMark: e.negativeMark,
+        window: examWindow(e, now),
+        published: e.status === 'published',
+        attempt: a ? { state: a.submittedAt || timeUp ? 'submitted' : 'running', marks: a.submittedAt ? a.marks : null, deadline: a.deadline } : null,
+      };
+    }),
+  );
+});
+
+/** Start (or continue) the exam. The clock starts on the first call. */
+router.post('/exams/:examId/start', async (req, res) => {
+  const exam = await myOnlineExam(req);
+  let attempt = await Attempt.findOne({ exam: exam._id, student: req.user.id });
+  if (!attempt) {
+    if (examWindow(exam) !== 'open') throw new HttpError(400, 'This exam is not open now. / পরীক্ষাটি এখন চালু নেই।');
+    const now = new Date();
+    let deadline = new Date(now.getTime() + exam.durationMinutes * 60 * 1000);
+    if (exam.closesAt && exam.closesAt < deadline) deadline = exam.closesAt;
+    try {
+      attempt = await Attempt.create({ exam: exam._id, student: req.user.id, startedAt: now, deadline, answers: exam.mcq.map(() => null) });
+    } catch (err) {
+      if (err.code !== 11000) throw err;
+      attempt = await Attempt.findOne({ exam: exam._id, student: req.user.id }); // double tap
+    }
+  }
+  if (!attempt.submittedAt && Date.now() > attempt.deadline.getTime() + GRACE_MS) await finishAttempt(exam, attempt);
+  res.json(paperFor(exam, attempt));
+});
+
+const answersSchema = z.object({ answers: z.array(z.number().int().min(0).max(LETTERS.length - 1).nullable()).max(300) });
+
+function cleanAnswers(exam, answers) {
+  return exam.mcq.map((q, i) => {
+    const a = answers[i];
+    return a === null || a === undefined || a >= q.options.length ? null : a;
+  });
+}
+
+/** Autosave while answering. */
+router.put('/exams/:examId/answers', async (req, res) => {
+  const exam = await myOnlineExam(req);
+  const { answers } = parse(answersSchema, req.body);
+  const attempt = await Attempt.findOne({ exam: exam._id, student: req.user.id });
+  if (!attempt) throw new HttpError(400, 'Start the exam first');
+  if (attempt.submittedAt) throw new HttpError(409, 'Already submitted. / জমা দেওয়া হয়ে গেছে।');
+  if (Date.now() > attempt.deadline.getTime() + GRACE_MS) {
+    await finishAttempt(exam, attempt);
+    throw new HttpError(409, 'Time is up. Your saved answers were submitted. / সময় শেষ, সেভ করা উত্তর জমা হয়েছে।');
+  }
+  attempt.answers = cleanAnswers(exam, answers);
+  await attempt.save();
+  res.json({ ok: true, savedAt: new Date() });
+});
+
+router.post('/exams/:examId/submit', async (req, res) => {
+  const exam = await myOnlineExam(req);
+  const { answers } = parse(answersSchema, req.body);
+  const attempt = await Attempt.findOne({ exam: exam._id, student: req.user.id });
+  if (!attempt) throw new HttpError(400, 'Start the exam first');
+  if (!attempt.submittedAt) {
+    // Answers sent after the time (plus a minute of grace) are ignored; the last autosave counts
+    if (Date.now() <= attempt.deadline.getTime() + GRACE_MS) attempt.answers = cleanAnswers(exam, answers);
+    await finishAttempt(exam, attempt);
+  }
+  res.json({ marks: attempt.marks, correct: attempt.correct, wrong: attempt.wrong, totalMarks: exam.totalMarks, published: exam.status === 'published' });
+});
+
+/** After the result is published: every question with the right answer and explanation. */
+router.get('/exams/:examId/review', async (req, res) => {
+  const exam = await myOnlineExam(req);
+  if (exam.status !== 'published') throw new HttpError(403, 'Answers are shown after the result is published. / রেজাল্ট প্রকাশের পর উত্তর দেখা যাবে।');
+  await finishExpired(exam);
+  const attempt = await Attempt.findOne({ exam: exam._id, student: req.user.id }).lean();
+  const answers = attempt?.answers || [];
+  res.json({
+    title: exam.title,
+    totalMarks: exam.totalMarks,
+    negativeMark: exam.negativeMark,
+    sat: Boolean(attempt),
+    ...(attempt ? scoreAnswers(exam, answers) : {}),
+    questions: exam.mcq.map((q, i) => ({ text: q.text, options: q.options, answer: q.answer, explanation: q.explanation, chapter: q.chapter, mine: answers[i] ?? null })),
   });
 });
 

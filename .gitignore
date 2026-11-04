@@ -10,3 +10,5 @@ dist/
 backups/
 biohelix-backup-*.json
 before-restore-*.json
+before-reset-*.json
+state.json

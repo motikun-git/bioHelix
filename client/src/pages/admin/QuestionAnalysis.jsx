@@ -111,7 +111,7 @@ function QuestionSetup({ exam, onSaved, onCancel }) {
   );
 }
 
-function AnalysisView({ exam, version }) {
+export function AnalysisView({ exam, version }) {
   const state = useLoad(() => get(`/exams/${exam._id}/analysis`), [exam._id, version]);
   return (
     <Loading state={state}>

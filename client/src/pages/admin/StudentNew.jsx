@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router';
-import { post, upload } from '../../lib/api.js';
+import { Link, useNavigate, useSearchParams } from 'react-router';
+import { patch, post, upload } from '../../lib/api.js';
 import { useBatches } from '../../lib/data.js';
 import { downloadCsv } from '../../lib/format.js';
 import { Alert, Button, CredentialCard, Empty, Field, Input, Loading, PageHeader, Panel, Select } from '../../components/ui.jsx';
@@ -9,14 +9,24 @@ export const studentFields = [
   { key: 'name', label: 'Full name', required: true, autoComplete: 'off' },
   { key: 'phone', label: 'Student phone', type: 'tel', inputMode: 'tel', hint: '01XXXXXXXXX' },
   { key: 'guardianName', label: 'Guardian name' },
-  { key: 'guardianPhone', label: 'Guardian phone', type: 'tel', inputMode: 'tel', hint: 'Result and absence SMS will go here later' },
+  { key: 'guardianPhone', label: 'Guardian phone', type: 'tel', inputMode: 'tel', hint: 'Absence, result and fee SMS go to this number' },
   { key: 'college', label: 'College' },
 ];
 
 export default function StudentNew() {
   const batches = useBatches('?active=true');
   const navigate = useNavigate();
-  const [form, setForm] = useState({ name: '', phone: '', guardianName: '', guardianPhone: '', college: '', batch: '' });
+  // Coming from an admission inquiry: fill in what the visitor typed
+  const [params] = useSearchParams();
+  const inquiry = params.get('inquiry');
+  const [form, setForm] = useState(() => ({
+    name: params.get('name') || '',
+    phone: params.get('phone') || '',
+    guardianName: '',
+    guardianPhone: params.get('guardianPhone') || '',
+    college: params.get('college') || '',
+    batch: '',
+  }));
   const [photo, setPhoto] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -36,6 +46,7 @@ export default function StudentNew() {
           photoError = err.message;
         });
       }
+      if (inquiry) await patch(`/inquiries/${inquiry}`, { status: 'admitted', note: `Admitted as ${res.student.studentId}` }).catch(() => {});
       setCreated({ ...res, photoError });
     } catch (err) {
       setError(err.message);

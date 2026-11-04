@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import { notifyResult } from '../services/sms.js';
 import { z } from 'zod';
-import { Batch, Exam, Program, Result, Student } from '../models/index.js';
+import { Attempt, Batch, Exam, Program, Result, Student } from '../models/index.js';
+import { LETTERS, finishExpired, markNonAttemptersAbsent, rescoreAll, syncAnalysisFields } from '../services/online.js';
 import { HttpError, assertObjectId, parse, parsePatch } from '../utils/http.js';
 import { csvUpload } from '../middleware/upload.js';
 import { describeRows, extractSheetId, readCsv, readSheet } from '../services/sheets.js';
@@ -17,10 +19,14 @@ const examFields = z.object({
   program: objectId('Pick a program'),
   batches: z.array(objectId('Invalid batch')).min(1, 'Pick at least one batch'),
   date: z.coerce.date(),
-  mode: z.enum(['google_form', 'offline']),
+  mode: z.enum(['google_form', 'offline', 'online']),
   totalMarks: z.coerce.number().positive().max(1000),
   passMarks: z.coerce.number().min(0).default(0),
   negativeMark: z.coerce.number().min(0).max(10).default(0),
+  // Online exams: when it can be taken and how long each student gets
+  opensAt: z.coerce.date().nullable().optional(),
+  closesAt: z.coerce.date().nullable().optional(),
+  durationMinutes: z.coerce.number().int().min(1).max(600).optional(),
 });
 const examSchema = examFields.refine((e) => e.passMarks <= e.totalMarks, {
   message: 'Pass marks cannot be more than total marks',
@@ -32,6 +38,10 @@ async function loadExam(id) {
   const exam = await Exam.findById(id);
   if (!exam) throw new HttpError(404, 'Exam not found');
   return exam;
+}
+
+function notOnline(exam) {
+  if (exam.mode === 'online') throw new HttpError(400, 'Online exams get their marks from the website itself');
 }
 
 async function checkBatches(programId, batchIds) {
@@ -61,8 +71,13 @@ router.get('/', async (req, res) => {
   res.json(exams.map((e) => ({ ...e, stats: stats.get(String(e._id)) })));
 });
 
+function checkWindow(opensAt, closesAt) {
+  if (opensAt && closesAt && closesAt <= opensAt) throw new HttpError(400, 'Closing time must be after opening time');
+}
+
 router.post('/', async (req, res) => {
   const data = parse(examSchema, req.body);
+  checkWindow(data.opensAt, data.closesAt);
   await checkBatches(data.program, data.batches);
   res.status(201).json(await Exam.create(data));
 });
@@ -83,6 +98,10 @@ router.patch('/:id', async (req, res) => {
   if (data.program && String(data.program) !== String(exam.program) && exam.status !== 'draft') {
     throw new HttpError(400, 'Results already exist, so the program cannot change');
   }
+  if (data.mode && data.mode !== exam.mode && exam.status !== 'draft') {
+    throw new HttpError(400, 'Results already exist, so the exam type cannot change');
+  }
+  checkWindow(data.opensAt === undefined ? exam.opensAt : data.opensAt, data.closesAt === undefined ? exam.closesAt : data.closesAt);
   const program = data.program || exam.program;
   if (data.batches || data.program) await checkBatches(program, data.batches || exam.batches.map(String));
   const total = data.totalMarks ?? exam.totalMarks;
@@ -90,8 +109,14 @@ router.patch('/:id', async (req, res) => {
   if (data.totalMarks && (await Result.exists({ exam: exam._id, marks: { $gt: data.totalMarks } }))) {
     throw new HttpError(400, 'Some students already have more marks than this total');
   }
+  const totalChanged = data.totalMarks !== undefined && data.totalMarks !== exam.totalMarks;
+  const negativeChanged = data.negativeMark !== undefined && data.negativeMark !== exam.negativeMark;
   Object.assign(exam, data);
   await exam.save();
+  if (exam.mode === 'online' && (totalChanged || negativeChanged)) {
+    await rescoreAll(exam);
+    if (exam.status === 'published') await rankExam(exam._id);
+  }
   res.json(exam);
 });
 
@@ -99,6 +124,7 @@ router.delete('/:id', async (req, res) => {
   const exam = await loadExam(req.params.id);
   if (exam.status === 'published') throw new HttpError(400, 'Unpublish the exam before deleting it');
   await Result.deleteMany({ exam: exam._id });
+  await Attempt.deleteMany({ exam: exam._id });
   await exam.deleteOne();
   res.json({ ok: true });
 });
@@ -116,6 +142,7 @@ const columnMapSchema = z.object({
 
 router.post('/:id/sheet/preview', async (req, res) => {
   const exam = await loadExam(req.params.id);
+  notOnline(exam);
   const { sheetUrl, sheetRange } = parse(
     z.object({ sheetUrl: z.string().min(1, 'Paste the Google Sheet link'), sheetRange: z.string().trim().max(100).optional() }),
     req.body,
@@ -130,6 +157,7 @@ router.post('/:id/sheet/preview', async (req, res) => {
 
 router.post('/:id/sheet/import', async (req, res) => {
   const exam = await loadExam(req.params.id);
+  notOnline(exam);
   if (!exam.sheetId) throw new HttpError(400, 'Preview the sheet first');
   const columnMap = parse(columnMapSchema, req.body.columnMap);
   const { rows } = await readSheet(exam.sheetId, exam.sheetRange || undefined);
@@ -147,6 +175,7 @@ router.post('/:id/csv/preview', csvUpload, async (req, res) => {
 
 router.post('/:id/csv/import', csvUpload, async (req, res) => {
   const exam = await loadExam(req.params.id);
+  notOnline(exam);
   if (!req.file) throw new HttpError(400, 'Choose a CSV file');
   const columnMap = parse(columnMapSchema, {
     studentId: req.body.studentIdColumn,
@@ -188,6 +217,7 @@ router.get('/:id/roster', async (req, res) => {
 
 router.put('/:id/marks', async (req, res) => {
   const exam = await loadExam(req.params.id);
+  notOnline(exam);
   const { entries } = parse(
     z.object({
       entries: z
@@ -206,6 +236,51 @@ router.put('/:id/marks', async (req, res) => {
   res.json({ ok: true, saved: entries.length });
 });
 
+// ---------- Online MCQ exam: questions ----------
+const mcqSchema = z.object({
+  questions: z
+    .array(
+      z.object({
+        text: z.string().trim().min(1, 'A question has no text').max(2000),
+        options: z.array(z.string().trim().min(1, 'An option is empty').max(500)).min(2, 'Each question needs at least 2 options').max(LETTERS.length),
+        answer: z.number().int().min(0),
+        chapter: z.string().trim().max(80).default(''),
+        explanation: z.string().trim().max(2000).default(''),
+      }),
+    )
+    .max(300, '300 questions at most'),
+});
+
+router.get('/:id/mcq', async (req, res) => {
+  const exam = await loadExam(req.params.id);
+  if (exam.mode !== 'online') throw new HttpError(400, 'Not an online exam');
+  await finishExpired(exam);
+  const [started, submitted] = await Promise.all([
+    Attempt.countDocuments({ exam: exam._id }),
+    Attempt.countDocuments({ exam: exam._id, submittedAt: { $ne: null } }),
+  ]);
+  res.json({ questions: exam.mcq, attempts: { started, submitted, inProgress: started - submitted } });
+});
+
+router.put('/:id/mcq', async (req, res) => {
+  const exam = await loadExam(req.params.id);
+  if (exam.mode !== 'online') throw new HttpError(400, 'Not an online exam');
+  const { questions } = parse(mcqSchema, req.body);
+  questions.forEach((q, i) => {
+    if (q.answer >= q.options.length) throw new HttpError(400, `Question ${i + 1}: the answer is not one of the options`);
+  });
+  const started = await Attempt.exists({ exam: exam._id });
+  if (started && questions.length !== exam.mcq.length) {
+    throw new HttpError(400, 'Students have started this exam, so questions cannot be added or removed. You can still fix text, answers and explanations.');
+  }
+  exam.mcq = questions;
+  syncAnalysisFields(exam);
+  await exam.save();
+  const rescored = started ? await rescoreAll(exam) : 0;
+  if (rescored && exam.status === 'published') await rankExam(exam._id);
+  res.json({ questions: exam.mcq, rescored });
+});
+
 // ---------- Question-wise analysis (Google Form exams) ----------
 router.get('/:id/questions', async (req, res) => {
   const exam = await loadExam(req.params.id);
@@ -215,6 +290,7 @@ router.get('/:id/questions', async (req, res) => {
 
 router.put('/:id/questions', async (req, res) => {
   const exam = await loadExam(req.params.id);
+  notOnline(exam);
   if (!exam.sheetHeaders?.length) throw new HttpError(400, 'Import the Google Form responses first');
   const { questions } = parse(
     z.object({
@@ -281,12 +357,20 @@ router.get('/:id/results', async (req, res) => {
 
 router.post('/:id/publish', async (req, res) => {
   const exam = await loadExam(req.params.id);
+  if (exam.mode === 'online') {
+    if (exam.closesAt && exam.closesAt > new Date() && !req.body?.force) {
+      throw new HttpError(400, 'The exam is still open. Publish after it closes.', { code: 'STILL_OPEN' });
+    }
+    await finishExpired(exam, true);
+    await markNonAttemptersAbsent(exam);
+  }
   const present = await Result.countDocuments({ exam: exam._id, isAbsent: false, marks: { $ne: null } });
   if (!present) throw new HttpError(400, 'No marks yet. Import results or enter marks first.');
   await rankExam(exam._id);
   exam.status = 'published';
   exam.publishedAt = new Date();
   await exam.save();
+  notifyResult(exam._id);
   res.json({ ok: true, status: exam.status });
 });
 

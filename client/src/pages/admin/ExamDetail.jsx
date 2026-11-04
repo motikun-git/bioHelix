@@ -4,6 +4,7 @@ import { del, get, post, put, upload } from '../../lib/api.js';
 import { formatDate, num } from '../../lib/format.js';
 import { Alert, Button, Field, Input, Loading, Modal, Panel, Select, StatusBadge, cx, useLoad } from '../../components/ui.jsx';
 import { ExamForm } from './Exams.jsx';
+import OnlineExam from './OnlineExam.jsx';
 import QuestionAnalysis from './QuestionAnalysis.jsx';
 
 // ---------- Import from Google Sheet or CSV ----------
@@ -427,7 +428,16 @@ export default function ExamDetail() {
                   disabled={!exam.stats.present}
                   onClick={() =>
                     window.confirm('Publish this result? Students will see their marks and rank.') &&
-                    act(async () => (await post(`/exams/${id}/publish`), refresh()))
+                    act(async () => {
+                      try {
+                        await post(`/exams/${id}/publish`);
+                      } catch (err) {
+                        if (err.data?.code !== 'STILL_OPEN') throw err;
+                        if (!window.confirm('The exam is still open. Close it now and publish? Students who are answering are submitted with what they saved.')) return;
+                        await post(`/exams/${id}/publish`, { force: true });
+                      }
+                      refresh();
+                    })
                   }
                 >
                   Publish result
@@ -467,7 +477,8 @@ export default function ExamDetail() {
             </dl>
           )}
 
-          {exam.status === 'draft' && marksPanel}
+          {exam.mode === 'online' && exam.status === 'draft' && <OnlineExam exam={exam} onChanged={refresh} version={version} />}
+          {exam.mode !== 'online' && exam.status === 'draft' && marksPanel}
 
           <Panel title="Results">
             <ResultsTable exam={exam} version={version} />
@@ -475,7 +486,8 @@ export default function ExamDetail() {
 
           {exam.mode === 'google_form' && <QuestionAnalysis exam={exam} onChanged={refresh} version={version} />}
 
-          {exam.status !== 'draft' && marksPanel}
+          {exam.mode === 'online' && exam.status !== 'draft' && <OnlineExam exam={exam} onChanged={refresh} version={version} />}
+          {exam.mode !== 'online' && exam.status !== 'draft' && marksPanel}
 
           <Modal open={editing} onClose={() => setEditing(false)} title="Edit exam">
             {editing && (

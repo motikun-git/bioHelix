@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { Attendance, Batch, Exam, Payment, Student } from '../models/index.js';
+import { Attendance, Batch, Exam, Inquiry, Payment, Student } from '../models/index.js';
 import { examStats } from '../services/results.js';
 import { dueList } from '../services/fees.js';
 import { lastBackupInfo } from '../services/backup.js';
@@ -35,9 +35,12 @@ router.get('/', async (req, res) => {
   const byStatus = Object.fromEntries(examCounts.map((c) => [c._id, c.count]));
   const sheetBy = new Map(todaySheets.map((s) => [String(s.batch), s.records]));
 
+  const isAdmin = req.user.role === 'admin';
   res.json({
     today,
+    role: req.user.role,
     lastBackupAt: lastBackup?.at || null,
+    newInquiries: isAdmin ? await Inquiry.countDocuments({ status: 'new' }) : 0,
     students: { active: activeStudents, total: totalStudents },
     batches: { active: batches.length },
     exams: { draft: byStatus.draft || 0, imported: byStatus.imported || 0, published: byStatus.published || 0 },
@@ -56,7 +59,8 @@ router.get('/', async (req, res) => {
           absent: records ? records.filter((r) => r.status === 'absent').length : 0,
         };
       }),
-    fees: {
+    // Teachers don't see money
+    fees: isAdmin && {
       month,
       collected: monthPayments.reduce((sum, p) => sum + p.amount, 0),
       payments: monthPayments.length,

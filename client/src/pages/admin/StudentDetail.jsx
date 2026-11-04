@@ -5,6 +5,7 @@ import { useBatches } from '../../lib/data.js';
 import { formatDate, num, schedule } from '../../lib/format.js';
 import { Alert, Button, CredentialCard, Field, Input, Loading, Modal, Panel, Select, StatusBadge, cx, useLoad } from '../../components/ui.jsx';
 import { FeeAccount } from './Fees.jsx';
+import { useIsAdmin } from '../../lib/auth.jsx';
 import { studentFields } from './StudentNew.jsx';
 import { Avatar } from './Students.jsx';
 
@@ -82,6 +83,7 @@ function EditForm({ student, onSaved, onCancel }) {
 }
 
 export default function StudentDetail() {
+  const isAdmin = useIsAdmin();
   const { id } = useParams();
   const state = useLoad(() => get(`/students/${id}`), [id]);
   const [editing, setEditing] = useState(false);
@@ -125,26 +127,32 @@ export default function StudentDetail() {
             All students
           </Link>
           <div className="flex flex-wrap items-center gap-4">
-            <button type="button" onClick={() => fileRef.current.click()} className="group relative rounded-full" aria-label="Change photo">
+            {isAdmin ? (
+              <button type="button" onClick={() => fileRef.current.click()} className="group relative rounded-full" aria-label="Change photo">
+                <Avatar url={s.photoUrl} name={s.name} size="size-20" />
+                <span className="absolute inset-x-0 bottom-0 rounded-b-full bg-ink/70 py-0.5 text-center text-xs font-semibold text-white">
+                  {uploading ? 'Uploading' : 'Photo'}
+                </span>
+              </button>
+            ) : (
               <Avatar url={s.photoUrl} name={s.name} size="size-20" />
-              <span className="absolute inset-x-0 bottom-0 rounded-b-full bg-ink/70 py-0.5 text-center text-xs font-semibold text-white">
-                {uploading ? 'Uploading' : 'Photo'}
-              </span>
-            </button>
+            )}
             <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => changePhoto(e.target.files[0])} />
             <div className="min-w-0 flex-1">
               <h1 className="text-2xl font-bold">{s.name}</h1>
               <p className="text-lg font-semibold text-helix-dark">{s.studentId}</p>
               <StatusBadge status={s.status} />
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="secondary" onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-              <Button variant="secondary" onClick={() => resetPassword(s)}>
-                Reset password
-              </Button>
-            </div>
+            {isAdmin && (
+              <div className="flex flex-wrap gap-2">
+                <Button variant="secondary" onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+                <Button variant="secondary" onClick={() => resetPassword(s)}>
+                  Reset password
+                </Button>
+              </div>
+            )}
           </div>
 
           <Alert tone={message.tone}>{message.text}</Alert>
@@ -196,16 +204,18 @@ export default function StudentDetail() {
                 </>
               )}
             </Panel>
-            <Panel
-              title="Fees"
-              action={
-                <Link to={`/admin/fees?student=${s._id}`} className="text-sm font-semibold text-helix-dark">
-                  Collect payment
-                </Link>
-              }
-            >
-              <FeeAccount account={s.fees} />
-            </Panel>
+            {s.fees && (
+              <Panel
+                title="Fees"
+                action={
+                  <Link to={`/admin/fees?student=${s._id}`} className="text-sm font-semibold text-helix-dark">
+                    Collect payment
+                  </Link>
+                }
+              >
+                <FeeAccount account={s.fees} />
+              </Panel>
+            )}
           </div>
 
           <section>

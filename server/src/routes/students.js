@@ -171,7 +171,11 @@ router.get('/:id', async (req, res) => {
     ...publicStudent(student),
     results: results.map(({ row, ...r }) => r),
     attendance: { ...attendanceTotals, recent: days.slice(-30).reverse() },
-    fees: { monthlyFee: fees.monthlyFee, totalDue: fees.totalDue, admission: fees.admission, months: fees.months.slice(0, 6) },
+    // Teachers don't see money
+    fees:
+      req.user.role === 'admin'
+        ? { monthlyFee: fees.monthlyFee, totalDue: fees.totalDue, admission: fees.admission, months: fees.months.slice(0, 6) }
+        : null,
   });
 });
 

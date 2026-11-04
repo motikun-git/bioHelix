@@ -10,7 +10,8 @@
     "build": "npm install --prefix server && npm install --prefix client --include=dev && npm run build --prefix client",
     "start": "npm start --prefix server",
     "backup": "npm run backup --prefix server --",
-    "restore": "npm run restore --prefix server --"
+    "restore": "npm run restore --prefix server --",
+    "reset-data": "npm run reset-data --prefix server --"
   },
   "engines": {
     "node": ">=20.19"

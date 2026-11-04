@@ -1,7 +1,8 @@
 import { Link, useParams } from 'react-router';
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { get } from '../../lib/api.js';
-import { formatDate, num, ordinal, schedule } from '../../lib/format.js';
+import { formatDate, formatTime, num } from '../../lib/format.js';
+import { ordinalL, useT } from '../../lib/i18n.jsx';
 import { Empty, Loading, Panel, cx, useLoad } from '../../components/ui.jsx';
 import { Avatar } from '../admin/Students.jsx';
 import { ChapterList, useChapters } from './PortalPages.jsx';
@@ -11,6 +12,7 @@ import { ChapterList, useChapters } from './PortalPages.jsx';
  * highest marked. Easier to read at a glance than three separate numbers.
  */
 function ScoreTrack({ result }) {
+  const { t, n } = useT();
   const { exam, marks, average, highest } = result;
   const pos = (v) => `${Math.max(0, Math.min(100, (v / exam.totalMarks) * 100))}%`;
   return (
@@ -20,12 +22,12 @@ function ScoreTrack({ result }) {
         <div className="absolute inset-y-0 left-0 rounded-full bg-helix/35" style={{ width: pos(marks) }} />
         {average !== null && (
           <span className="absolute top-1/2 h-4 w-0.5 -translate-y-1/2 bg-ink-soft" style={{ left: pos(average) }}>
-            <span className="absolute top-5 -translate-x-1/2 whitespace-nowrap text-xs text-ink-soft">avg {num(average)}</span>
+            <span className="absolute top-5 -translate-x-1/2 whitespace-nowrap text-xs text-ink-soft">{t('res.avg', { n: n(num(average)) })}</span>
           </span>
         )}
         {highest !== null && (
           <span className="absolute top-1/2 h-4 w-0.5 -translate-y-1/2 bg-ink" style={{ left: pos(highest) }}>
-            <span className="absolute -top-6 -translate-x-1/2 whitespace-nowrap text-xs font-semibold">top {num(highest)}</span>
+            <span className="absolute -top-6 -translate-x-1/2 whitespace-nowrap text-xs font-semibold">{t('res.top', { n: n(num(highest)) })}</span>
           </span>
         )}
         <span className="absolute top-1/2 size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white bg-helix shadow" style={{ left: pos(marks) }} />
@@ -35,14 +37,13 @@ function ScoreTrack({ result }) {
 }
 
 function ResultSummary({ result, large }) {
+  const { t, n, lang } = useT();
   const { exam } = result;
   if (result.isAbsent) {
     return (
       <div>
-        <p className={cx('font-bold text-fail', large ? 'text-4xl' : 'text-2xl')}>Absent</p>
-        <p className="text-ink-soft">
-          {result.participants} students sat this exam. Highest was {num(result.highest)}, average {num(result.average)}.
-        </p>
+        <p className={cx('font-bold text-fail', large ? 'text-4xl' : 'text-2xl')}>{t('res.absent')}</p>
+        <p className="text-ink-soft">{t('res.absentLead', { n: n(result.participants), high: n(num(result.highest)), avg: n(num(result.average)) })}</p>
       </div>
     );
   }
@@ -50,34 +51,35 @@ function ResultSummary({ result, large }) {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
         <p className={cx('font-bold leading-none', large ? 'text-6xl' : 'text-5xl')}>
-          {num(result.marks)}
-          <span className="text-2xl font-semibold text-ink-soft"> / {exam.totalMarks}</span>
+          {n(num(result.marks))}
+          <span className="text-2xl font-semibold text-ink-soft"> / {n(exam.totalMarks)}</span>
         </p>
         {result.rank && (
           <p className="text-right leading-tight">
-            <span className={cx('block font-bold text-helix-dark', large ? 'text-4xl' : 'text-3xl')}>{ordinal(result.rank)}</span>
-            <span className="text-sm text-ink-soft">of {result.participants} in merit list</span>
+            <span className={cx('block font-bold text-helix-dark', large ? 'text-4xl' : 'text-3xl')}>{ordinalL(result.rank, lang)}</span>
+            <span className="text-sm text-ink-soft">{t('res.ofMerit', { n: n(result.participants) })}</span>
           </p>
         )}
       </div>
       <ScoreTrack result={result} />
       <p className="text-sm text-ink-soft">
-        {result.percent}%{exam.passMarks > 0 && (result.passed ? ', passed' : `, below pass mark ${exam.passMarks}`)}
+        {n(result.percent)}%{exam.passMarks > 0 && `, ${result.passed ? t('res.passed') : t('res.belowPass', { n: n(exam.passMarks) })}`}
       </p>
     </div>
   );
 }
 
 function ProgressChart({ results }) {
+  const { t, locale } = useT();
   const points = results
     .filter((r) => !r.isAbsent && r.percent !== null)
     .slice()
     .reverse()
-    .map((r) => ({ name: r.exam.title, date: formatDate(r.exam.date), percent: r.percent }));
+    .map((r) => ({ name: r.exam.title, date: formatDate(r.exam.date, locale), percent: r.percent }));
   if (points.length < 2) return null;
   return (
-    <Panel title="Progress">
-      <p className="mb-3 text-sm text-ink-soft">Your marks as a percentage, oldest exam on the left.</p>
+    <Panel title={t('res.progress')}>
+      <p className="mb-3 text-sm text-ink-soft">{t('res.progressLead')}</p>
       <div className="h-56">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={points} margin={{ top: 8, right: 12, bottom: 0, left: -18 }}>
@@ -85,7 +87,7 @@ function ProgressChart({ results }) {
             <XAxis dataKey="date" tick={{ fontSize: 12, fill: '#4a5d74' }} tickLine={false} axisLine={{ stroke: '#d9e2df' }} />
             <YAxis domain={[0, 100]} ticks={[0, 25, 50, 75, 100]} tick={{ fontSize: 12, fill: '#4a5d74' }} tickLine={false} axisLine={false} unit="%" />
             <Tooltip
-              formatter={(v) => [`${v}%`, 'Score']}
+              formatter={(v) => [`${v}%`, t('res.score')]}
               labelFormatter={(_, p) => p?.[0]?.payload?.name}
               contentStyle={{ borderRadius: 8, border: '1px solid #d9e2df', fontFamily: 'inherit' }}
             />
@@ -97,9 +99,24 @@ function ProgressChart({ results }) {
   );
 }
 
+/** "Sat, Mon, Wed, 4:30 pm" in the reader's language. */
+export function useSchedule() {
+  const { t, locale } = useT();
+  return (batch) => {
+    if (!batch) return '';
+    const days = (batch.days || []).map((d) => t(`days.${d}`)).join(', ');
+    const time = batch.startTime ? `${formatTime(batch.startTime, locale)}${batch.endTime ? ` – ${formatTime(batch.endTime, locale)}` : ''}` : '';
+    return [days, time].filter(Boolean).join(', ');
+  };
+}
+
 export default function PortalHome() {
+  const { t, n, lang, locale } = useT();
+  const schedule = useSchedule();
   const me = useLoad(() => get('/me'));
   const results = useLoad(() => get('/me/results'));
+  const exams = useLoad(() => get('/me/exams'));
+  const openExams = (exams.data || []).filter((e) => e.window === 'open' && e.attempt?.state !== 'submitted');
   const chapters = useChapters();
 
   return (
@@ -119,22 +136,31 @@ export default function PortalHome() {
         )}
       </Loading>
 
+      {openExams.map((e) => (
+        <Link key={e._id} to="/portal/exams" className="flex items-center justify-between gap-3 rounded-xl border border-helix bg-helix-tint px-4 py-3 text-helix-dark">
+          <span className="font-semibold">
+            {t('ex.title')}: {e.title}
+          </span>
+          <span className="shrink-0 font-semibold underline">{e.attempt ? t('ex.continue') : t('ex.start')}</span>
+        </Link>
+      ))}
+
       <Loading state={results}>
         {(list) =>
           list.length === 0 ? (
-            <Empty title="No results yet">Your marks will appear here as soon as BioHelix publishes an exam result.</Empty>
+            <Empty title={t('res.none')}>{t('res.noneLead')}</Empty>
           ) : (
             <>
               <Panel
-                title="Latest result"
+                title={t('res.latest')}
                 action={
                   <Link to={`/portal/results/${list[0].exam._id}`} className="text-sm font-semibold text-helix-dark">
-                    Details
+                    {t('res.details')}
                   </Link>
                 }
               >
                 <p className="mb-3 font-semibold">
-                  {list[0].exam.title} <span className="font-normal text-ink-soft">({formatDate(list[0].exam.date)})</span>
+                  {list[0].exam.title} <span className="font-normal text-ink-soft">({formatDate(list[0].exam.date, locale)})</span>
                 </p>
                 <ResultSummary result={list[0]} />
               </Panel>
@@ -143,29 +169,29 @@ export default function PortalHome() {
 
               <ChapterList
                 chapters={chapters.data}
-                title="Where you lose marks"
-                note="Correct answers per chapter across all MCQ exams, weakest first. The dark line is the average of all students."
+                title={t('res.loseTitle')}
+                note={t('res.loseLead')}
               />
 
               <section>
-                <h2 className="mb-2 text-lg font-semibold">All exams</h2>
+                <h2 className="mb-2 text-lg font-semibold">{t('res.all')}</h2>
                 <ul className="divide-y divide-line overflow-hidden rounded-xl border border-line bg-white">
                   {list.map((r) => (
                     <li key={r.exam._id}>
                       <Link to={`/portal/results/${r.exam._id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper">
                         <div className="min-w-0">
                           <p className="truncate font-semibold">{r.exam.title}</p>
-                          <p className="text-sm text-ink-soft">{formatDate(r.exam.date)}</p>
+                          <p className="text-sm text-ink-soft">{formatDate(r.exam.date, locale)}</p>
                         </div>
                         <p className="shrink-0 text-right">
                           {r.isAbsent ? (
-                            <span className="font-semibold text-fail">Absent</span>
+                            <span className="font-semibold text-fail">{t('res.absent')}</span>
                           ) : (
                             <span className="font-semibold">
-                              {num(r.marks)}/{r.exam.totalMarks}
+                              {n(num(r.marks))}/{n(r.exam.totalMarks)}
                             </span>
                           )}
-                          {r.rank && <span className="block text-sm text-ink-soft">{ordinal(r.rank)}</span>}
+                          {r.rank && <span className="block text-sm text-ink-soft">{ordinalL(r.rank, lang)}</span>}
                         </p>
                       </Link>
                     </li>
@@ -181,12 +207,13 @@ export default function PortalHome() {
 }
 
 export function ResultDetail() {
+  const { t, n, lang, locale } = useT();
   const { examId } = useParams();
   const state = useLoad(() => get(`/me/results/${examId}`), [examId]);
   return (
     <div className="space-y-4">
       <Link to="/portal" className="text-sm font-semibold text-helix-dark">
-        All results
+        {t('res.allResults')}
       </Link>
       <Loading state={state}>
         {(r) => (
@@ -194,7 +221,7 @@ export function ResultDetail() {
             <div>
               <h1 className="text-2xl font-bold">{r.exam.title}</h1>
               <p className="text-ink-soft">
-                {formatDate(r.exam.date)}, {r.exam.mode === 'offline' ? 'written exam' : 'online MCQ'}
+                {formatDate(r.exam.date, locale)}, {r.exam.mode === 'offline' ? t('res.written') : t('res.mcq')}
               </p>
             </div>
             <Panel>
@@ -202,9 +229,9 @@ export function ResultDetail() {
             </Panel>
             <dl className="grid grid-cols-3 gap-3">
               {[
-                ['Students sat', r.participants],
-                ['Highest', num(r.highest)],
-                ['Average', num(r.average)],
+                [t('res.sat'), n(r.participants)],
+                [t('res.highest'), n(num(r.highest))],
+                [t('res.average'), n(num(r.average))],
               ].map(([label, value]) => (
                 <div key={label} className="rounded-xl border border-line bg-white px-3 py-3">
                   <dd className="text-2xl font-bold">{value}</dd>
@@ -212,7 +239,31 @@ export function ResultDetail() {
                 </div>
               ))}
             </dl>
-            <ChapterList chapters={r.chapters} title="This exam by chapter" note="The dark line is the average of all students who sat it." />
+            {r.online && (
+              <Link to={`/portal/exams/${r.exam._id}/review`} className="inline-flex min-h-11 items-center rounded-lg border border-line bg-white px-4 font-semibold">
+                {t('ex.review')}
+              </Link>
+            )}
+            {r.top?.length > 0 && (
+              <Panel title={t('res.merit')}>
+                <ol className="divide-y divide-line">
+                  {r.top.map((m, i) => (
+                    <li key={i} className={cx('flex items-center gap-3 py-2', m.me && 'font-semibold text-helix-dark')}>
+                      <span className="w-10 shrink-0 font-bold">{ordinalL(m.rank, lang)}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">
+                          {m.name}
+                          {m.me && ` (${t('res.you')})`}
+                        </span>
+                        {m.college && <span className="block truncate text-sm font-normal text-ink-soft">{m.college}</span>}
+                      </span>
+                      <span className="shrink-0 font-semibold">{n(num(m.marks))}</span>
+                    </li>
+                  ))}
+                </ol>
+              </Panel>
+            )}
+            <ChapterList chapters={r.chapters} title={t('res.byChapter')} note={t('res.byChapterLead')} />
           </>
         )}
       </Loading>

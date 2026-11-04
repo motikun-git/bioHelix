@@ -45,10 +45,12 @@ if (email) {
     if (existing) {
       existing.name = name;
       existing.passwordHash = passwordHash;
+      existing.role = 'admin';
+      existing.mustChangePassword = false;
       await existing.save();
       console.log(`Admin ${email} updated (password reset).`);
     } else {
-      await Admin.create({ name, email, passwordHash });
+      await Admin.create({ name, email, passwordHash, role: 'admin' });
       console.log(`Admin ${email} created.`);
     }
   }

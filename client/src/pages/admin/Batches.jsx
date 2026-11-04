@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router';
 import { del, patch, post } from '../../lib/api.js';
 import { DAYS, useBatches, usePrograms } from '../../lib/data.js';
+import { useIsAdmin } from '../../lib/auth.jsx';
 import { schedule, taka } from '../../lib/format.js';
 import { Alert, Button, Empty, Field, Input, Loading, Modal, PageHeader, Select, StatusBadge, cx } from '../../components/ui.jsx';
 
@@ -117,6 +118,7 @@ function BatchForm({ initial, programs, onSaved, onCancel }) {
 }
 
 export default function Batches() {
+  const isAdmin = useIsAdmin();
   const programs = usePrograms();
   const batches = useBatches();
   const [editing, setEditing] = useState(null); // null | 'new' | batch
@@ -137,13 +139,13 @@ export default function Batches() {
       <PageHeader
         title="Batches"
         subtitle="HSC and Admission batches with their class days."
-        action={<Button onClick={() => setEditing('new')}>New batch</Button>}
+        action={isAdmin && <Button onClick={() => setEditing('new')}>New batch</Button>}
       />
       <Alert className="mb-4">{error}</Alert>
       <Loading state={batches}>
         {(list) =>
           list.length === 0 ? (
-            <Empty title="No batches yet" action={<Button onClick={() => setEditing('new')}>Create the first batch</Button>}>
+            <Empty title="No batches yet" action={isAdmin && <Button onClick={() => setEditing('new')}>Create the first batch</Button>}>
               A batch groups students who sit together, for example &quot;HSC 27 Morning&quot;.
             </Empty>
           ) : (
@@ -163,13 +165,17 @@ export default function Batches() {
                       {b.studentCount} {b.studentCount === 1 ? 'student' : 'students'}
                       {b.capacity > 0 && ` of ${b.capacity}`}
                     </Link>
-                    <Button variant="secondary" onClick={() => setEditing(b)}>
-                      Edit
-                    </Button>
-                    {b.studentCount === 0 && (
-                      <Button variant="ghost" onClick={() => remove(b)}>
-                        Delete
-                      </Button>
+                    {isAdmin && (
+                      <>
+                        <Button variant="secondary" onClick={() => setEditing(b)}>
+                          Edit
+                        </Button>
+                        {b.studentCount === 0 && (
+                          <Button variant="ghost" onClick={() => remove(b)}>
+                            Delete
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </li>
